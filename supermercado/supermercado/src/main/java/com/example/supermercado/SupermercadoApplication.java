@@ -1,8 +1,11 @@
 package com.example.supermercado;
 
+import com.example.supermercado.modules.Pedido;
 import com.example.supermercado.services.AdministradorService;
 import com.example.supermercado.services.CarritoService;
+import com.example.supermercado.services.PedidoFacturaService;
 import com.example.supermercado.services.ProductoService;
+import com.example.supermercado.services.RegistroOperacionesService;
 import com.example.supermercado.services.UsuarioService;
 
 import java.util.Scanner;
@@ -90,7 +93,9 @@ public class SupermercadoApplication {
 		System.out.println("4. Ver catálogo de productos. ");
 		System.out.println("5. Eliminar producto del catalogo. ");
 		System.out.println("6. Ver registro de usuarios. ");
-		System.out.println("7. Volver Atras <---");
+		System.out.println("7. Ver lista de precios. ");
+		System.out.println("8. Ver registro de operaciones. ");
+		System.out.println("9. Volver Atras <---");
 		
 		System.out.print("Opción: ");
 
@@ -122,13 +127,22 @@ public class SupermercadoApplication {
 				usuarioService.mostrarDatosUsuarios();
 				break;
 			case "7":
+				//Método para mostrar la lista de precios actualizada para las ventas
+				productService.mostrarListaPrecios();
+				break;
+			case "8":
+				//Método para mostrar las operaciones de facturacion y de pagos realizada por los usuarios.
+				RegistroOperacionesService registroOperacionesService=context.getBean(RegistroOperacionesService.class);
+				registroOperacionesService.mostrarRegistroOperaciones();
+				break;
+			case "9":
 				//Método para volver al menu principal
 				vistaPrincipalAdmi(context, sc);
 				break;
 
 		}
 
-	} while(!opcion.equals("7"));
+	} while(!opcion.equals("9"));
 
 	}
 
@@ -179,6 +193,8 @@ public class SupermercadoApplication {
 	private static void mostrarMenuUsuario(ConfigurableApplicationContext context, Scanner scanner, String usuario) {
 		ProductoService productoService= context.getBean(ProductoService.class);
 		CarritoService carritoService= context.getBean(CarritoService.class);
+		UsuarioService usuarioService = context.getBean(UsuarioService.class);
+		PedidoFacturaService pedidoFacturaService=context.getBean(PedidoFacturaService.class);
 
 		System.out.println("\nBienvenido al menú:");
 
@@ -190,8 +206,8 @@ public class SupermercadoApplication {
 			System.out.println("3. Agregar un producto al carrito.");
 			System.out.println("4. Eliminar un producto del carrito.");
 			System.out.println("5. Modificar cantidad de un producto.");
-			System.out.println("6. Intercambiar un producto por otro.");
-			System.out.println("7. Generar pedido."); //Esta funcion convierte un carrito en un pedido y genera la factura. El carrito se vacía.
+			System.out.println("6. Cambiar productos.");
+			System.out.println("7. Finalizar compra."); //Esta funcion convierte un carrito en un pedido y genera la factura. El carrito se vacía.
 			System.out.println("8. Pagar facturas."); //De una lista de facturas que tiene el usuario elige cuales pagar.
 			System.out.println("9. Ver mis datos personales.");
 			System.out.println("10. Cerrar Sesión.");
@@ -219,15 +235,37 @@ public class SupermercadoApplication {
 					carritoService.intercambiarProducto(usuario, scanner);
 					break;
 				case "7":
-					UsuarioService usuarioService = context.getBean(UsuarioService.class);
-					usuarioService.mostrarUsuarioYActividadesPorNombre(usuario);
+					Pedido pedido=pedidoFacturaService.calcularPedido(usuario, scanner);
+					pedidoFacturaService.generarFactura(pedido, usuario);
+					System.out.println("Se ha facturado el pedido. Si desea pagar facturas presione 8 en el menú.");
+					//Se vacía el carrito
+					carritoService.vaciarCarrito(usuario);
 					break;
 				case "8":
+					pedidoFacturaService.elegirPagoFacturas(scanner,usuario);
+					break;
+				case "9":
+					usuarioService.mostrarUsuarioYActividadesPorNombre(usuario);
+					break;
+				case "10":
+					System.out.println("Está seguro que desea cerrar sesión?");
+					System.out.println("1. Si");
+					System.out.println("2. No");
+					System.out.print("Opcion: ");
+					String cerrar=scanner.nextLine();
+					if(cerrar.equals("1")){
+						usuarioService.finalizarActividadUsuario(usuario);
+						scanner.close();
+						context.close();
+						return;
+						} else{
+							mostrarMenuUsuario(context, scanner, usuario);
+						}
 					break;
 				default:
 					System.out.println("Opción no válida. Intente nuevamente.");
 			}
-		} while (opcionSecundaria != "6");
+		} while (opcionSecundaria != "10");
 	}
 
 

@@ -3,6 +3,7 @@ package com.example.supermercado.services;
 import java.time.Duration;
 
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.Scanner;
@@ -162,33 +163,46 @@ public class UsuarioService {
         try {
             List<ActividadUsuario> actividades = actividadUsuarioRepository.findByUsuarioId(usuarioId);
             
+            Optional<Usuario> usuarios=usuarioRepository.findById(usuarioId);
+            Usuario usuario= usuarios.get();
+            
             if (actividades.isEmpty()) {
-                mostrarCategoria("LOW");
+                usuario.setCategoria("LOW");
             }
             
             long duracionTotalMinutos = 0;
             LocalDateTime ahora = LocalDateTime.now();
+            LocalDateTime inicioHoy = LocalDateTime.of(ahora.toLocalDate(), LocalTime.MIN);
+            LocalDateTime finHoy = LocalDateTime.of(ahora.toLocalDate(), LocalTime.MAX);
             
             for (ActividadUsuario actividad : actividades) {
                 LocalDateTime inicio = actividad.getInicioSesion();
                 LocalDateTime fin = actividad.getFinSesion() != null ? actividad.getFinSesion() : ahora;
-                duracionTotalMinutos += Duration.between(inicio, fin).toMinutes();
+                
+                if (inicio.isAfter(inicioHoy) && fin.isBefore(finHoy)) {
+                    duracionTotalMinutos += Duration.between(inicio, fin).toMinutes();
+                }            
             }
             
             if (duracionTotalMinutos > 240) {
-                mostrarCategoria("TOP");
+                usuario.setCategoria("TOP");
             } else if (duracionTotalMinutos > 120) {
-                mostrarCategoria("MEDIUM");
+                usuario.setCategoria("MEDIUM");
             } else {
-                mostrarCategoria("LOW");
+                usuario.setCategoria("LOW");
             }
+
+            usuarioRepository.save(usuario);
+
         } catch (Exception e) {
             e.printStackTrace(); // Cualquier otro manejo de errores
         }
     }
 
-    public void mostrarCategoria(String categoria){
-        System.out.println("La categoria del usuario es: "+ categoria);
+    public void mostrarCategoria(String usuarioId){
+        Optional<Usuario> usuarios=usuarioRepository.findById(usuarioId);
+        Usuario usuario= usuarios.get();
+        System.out.println("La categoria del usuario es: "+ usuario.getCategoria());
     }
 
     
@@ -199,17 +213,19 @@ public class UsuarioService {
             System.out.println("Nombre: " + usuario.getNombre());
             System.out.println("Direccion: " + usuario.getDireccion());
             System.out.println("Documento Identidad: " + usuario.getDni());
-            System.out.println("Actividades:");
+            System.out.println("Categoria: " + usuario.getCategoria());
+            System.out.println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
+            System.out.println("                 Actividades del Usuario:             ");
             
             List<ActividadUsuario> actividades = actividadUsuarioRepository.findByUsuarioId(usuario.getId());
             
             for (ActividadUsuario actividad : actividades) {
-                System.out.println("{inicio: " + actividad.getInicioSesion() +
-                                   ", fin: " + actividad.getFinSesion() +
-                                   ", duracion: " + calcularDuracion(actividad.getInicioSesion(), actividad.getFinSesion()) + " minutos}");
+                System.out.println("{Inicio: " + actividad.getInicioSesion() +
+                                   ", Fin: " + actividad.getFinSesion() +
+                                   ", Duracion: " + calcularDuracion(actividad.getInicioSesion(), actividad.getFinSesion()) + " minutos}");
             }
             
-            System.out.println("-----------------------------------");
+            System.out.println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
         });
     }
 
@@ -225,7 +241,7 @@ public class UsuarioService {
     public void mostrarDatosUsuarios(){
         List<Usuario> usuarios=usuarioRepository.findAll();
         System.out.println("----------------------------------------------------------");
-        System.out.println("                  REGISTRO DE USUARIOS                    ");
+        System.out.println("|                  REGISTRO DE USUARIOS                   | ");
         System.out.println("----------------------------------------------------------");
         for(Usuario usuario : usuarios){
             System.out.println("Nombre: "+ usuario.getNombre());

@@ -61,8 +61,8 @@ public class CarritoService {
                     continue; // Volver a pedir la cantidad si no es un número válido
                 }
     
-                if (cantidad > stock) {
-                    System.out.println("Error: La cantidad es mayor al stock disponible.");
+                if (cantidad > stock || cantidad<1) {
+                    System.out.println("Error: La cantidad es incorrecta.");
                 } else {
                     //Lógica para agregar el producto al carrito
                     try(Driver driver = GraphDatabase.driver("bolt://localhost:7687")){
@@ -180,74 +180,119 @@ public class CarritoService {
             System.out.println("Ingrese la nueva cantidad: ");
             int nuevaCantidad = sc.nextInt();
             
-            try (Driver driver = GraphDatabase.driver("bolt://localhost:7687")) {
-                try (Session session = driver.session()) {
-                    // Obtener la cantidad actual y el stock del producto en el carrito
-                    Result result = session.run(
-                        "MATCH (c:Carrito {idUsuario: $usuario})-[r:CONTIENE]->(p:Producto {nombre: $nombreProducto}) " +
-                        "RETURN r.cantidad AS cantidad, p.stock AS stock",
-                        Values.parameters("usuario", usuario, "nombreProducto", nombreProducto)
-                    );
-                    
-                    if (result.hasNext()) {
-                        Record record = result.next();
-                        int cantidadActual = record.get("cantidad").asInt();
-                        int stock = record.get("stock").asInt();
+            if(nuevaCantidad>0){
+                try (Driver driver = GraphDatabase.driver("bolt://localhost:7687")) {
+                    try (Session session = driver.session()) {
+                        // Obtener la cantidad actual y el stock del producto en el carrito
+                        Result result = session.run(
+                            "MATCH (c:Carrito {idUsuario: $usuario})-[r:CONTIENE]->(p:Producto {nombre: $nombreProducto}) " +
+                            "RETURN r.cantidad AS cantidad, p.stock AS stock",
+                            Values.parameters("usuario", usuario, "nombreProducto", nombreProducto)
+                        );
                         
-                        // Si la nueva cantidad es mayor que la anterior
-                        if (nuevaCantidad > cantidadActual) {
-                            // Verificar el stock
-                            if (nuevaCantidad <= stock) {
-                                // Restarle la nueva cantidad al stock
-                                int diferencia = nuevaCantidad - cantidadActual;
+                        if (result.hasNext()) {
+                            Record record = result.next();
+                            int cantidadActual = record.get("cantidad").asInt();
+                            int stock = record.get("stock").asInt();
+                            
+                            // Si la nueva cantidad es mayor que la anterior
+                            if (nuevaCantidad > cantidadActual) {
+                                // Verificar el stock
+                                if (nuevaCantidad <= stock) {
+                                    // Restarle la nueva cantidad al stock
+                                    int diferencia = nuevaCantidad - cantidadActual;
+                                    session.run(
+                                        "MATCH (c:Carrito {idUsuario: $usuario})-[r:CONTIENE]->(p:Producto {nombre: $nombreProducto}) " +
+                                        "SET r.cantidad = $nuevaCantidad, p.stock = p.stock - $diferencia",
+                                        Values.parameters("usuario", usuario, "nombreProducto", nombreProducto, "nuevaCantidad", nuevaCantidad, "diferencia", diferencia)
+                                    );
+                                    System.out.println("Cantidad actualizada correctamente.");
+                                } else {
+                                    System.out.println("No hay suficiente stock disponible.");
+                                }
+                            }
+                            // Si la nueva cantidad es menor que la anterior
+                            else if (nuevaCantidad < cantidadActual) {
+                                int diferencia = cantidadActual - nuevaCantidad;
                                 session.run(
                                     "MATCH (c:Carrito {idUsuario: $usuario})-[r:CONTIENE]->(p:Producto {nombre: $nombreProducto}) " +
-                                    "SET r.cantidad = $nuevaCantidad, p.stock = p.stock - $diferencia",
+                                    "SET r.cantidad = $nuevaCantidad, p.stock = p.stock + $diferencia",
                                     Values.parameters("usuario", usuario, "nombreProducto", nombreProducto, "nuevaCantidad", nuevaCantidad, "diferencia", diferencia)
                                 );
                                 System.out.println("Cantidad actualizada correctamente.");
-                            } else {
-                                System.out.println("No hay suficiente stock disponible.");
                             }
+                            // Si la nueva cantidad es igual a la anterior, no se hace ningún cambio
+                            else {
+                                System.out.println("La nueva cantidad es igual a la cantidad actual, no se realiza ningún cambio.");
+                            }
+                        } else {
+                            System.out.println("El producto no existe en su carrito.");
                         }
-                        // Si la nueva cantidad es menor que la anterior
-                        else if (nuevaCantidad < cantidadActual) {
-                            int diferencia = cantidadActual - nuevaCantidad;
-                            session.run(
-                                "MATCH (c:Carrito {idUsuario: $usuario})-[r:CONTIENE]->(p:Producto {nombre: $nombreProducto}) " +
-                                "SET r.cantidad = $nuevaCantidad, p.stock = p.stock + $diferencia",
-                                Values.parameters("usuario", usuario, "nombreProducto", nombreProducto, "nuevaCantidad", nuevaCantidad, "diferencia", diferencia)
-                            );
-                            System.out.println("Cantidad actualizada correctamente.");
-                        }
-                        // Si la nueva cantidad es igual a la anterior, no se hace ningún cambio
-                        else {
-                            System.out.println("La nueva cantidad es igual a la cantidad actual, no se realiza ningún cambio.");
-                        }
-                    } else {
-                        System.out.println("El producto no existe en su carrito.");
+                    }
+                } catch (Exception e) {
+                    System.err.println("Error al cambiar la cantidad del producto: " + e.getMessage());
+                }
+            } else{
+                System.out.println("La cantidad debe ser mayor a 0.");
+            }
+        }   else {
+            System.out.println("Aún no tiene productos en su carrito.");
+        }
+        }
+
+        public void intercambiarProducto(String usuario, Scanner sc){
+            boolean eliminar= eliminarProducto(sc, usuario);
+            if(eliminar==true){
+                boolean agregar= agregarProducto(sc, usuario);
+                if(agregar==true){
+                    System.out.println("Los productos se han intercambiado exitosamente.");
+                }else{
+                    System.out.println("No se pudo agregar el producto. No se completó el proceso de intercambio.");
+                }
+            }else{
+                System.out.println("No se pudo eliminar el producto");
+            }
+    }
+
+    public double calcularTotalCarrito(String usuario) {
+        double valorCarrito = 0;
+    
+        if (existeCarrito(usuario)) {
+            try (Driver driver = GraphDatabase.driver("bolt://localhost:7687")) {
+                try (Session session = driver.session()) {
+                    Result result = session.run(
+                        "MATCH (c:Carrito {idUsuario: $usuario})-[r:CONTIENE]->(p:Producto) " +
+                        "RETURN p.nombre AS nombre, p.precio AS precio, r.cantidad AS cantidad",
+                        Values.parameters("usuario", usuario)
+                    );
+    
+                    while (result.hasNext()) {
+                        Record record = result.next();
+    
+                        double precio = record.get("precio").asDouble();
+                        int cantidad = record.get("cantidad").asInt();
+                        double valorTotalProducto = precio * cantidad;
+    
+                        valorCarrito += valorTotalProducto; // Sumar el valor total de cada producto al carrito
                     }
                 }
             } catch (Exception e) {
-                System.err.println("Error al cambiar la cantidad del producto: " + e.getMessage());
+                System.err.println("Error al obtener el carrito: " + e.getMessage());
             }
-        } else {
-            System.out.println("Aún no tiene productos en su carrito.");
         }
+    
+        return valorCarrito;
     }
 
-    public void intercambiarProducto(String usuario, Scanner sc){
-        boolean eliminar= eliminarProducto(sc, usuario);
-        if(eliminar==true){
-            boolean agregar= agregarProducto(sc, usuario);
-            if(agregar==true){
-                System.out.println("Los productos se han intercambiado exitosamente.");
-            }else{
-                System.out.println("No se pudo agregar el producto. No se completó el proceso de intercambio.");
+    public void vaciarCarrito(String usuario) {
+        try (Driver driver = GraphDatabase.driver("bolt://localhost:7687")) {
+            try (Session session = driver.session()) {
+                session.run("MATCH (c:Carrito {idUsuario: $usuario})-[r:CONTIENE]->(p:Producto) " +
+                            "DELETE r",
+                            Values.parameters("usuario", usuario));
             }
-        }else{
-            System.out.println("No se pudo eliminar el producto");
         }
+        System.out.println("Carrito vaciado correctamente.");
     }
 
 }
